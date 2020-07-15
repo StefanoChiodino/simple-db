@@ -94,6 +94,8 @@ mod simple_db {
 #[cfg(test)]
 mod tests {
     use crate::simple_db::*;
+    use serde::Deserialize;
+    use serde::Serialize;
     use std::collections::HashMap;
     use std::panic;
     use uuid::Uuid;
@@ -176,6 +178,25 @@ mod tests {
         let client = seeded_client();
         let result = client.delete::<String>(&"made_up".to_string());
         assert!(result.is_err());
+        client.nuke();
+    }
+
+    #[test]
+    fn complex_object_workflow() {
+        #[derive(Serialize, Deserialize)]
+        struct Complex {
+            name: String,
+            x: i32,
+        }
+        let client = seeded_client();
+        let complex = Complex {
+            name: "Stefano".to_string(),
+            x: 34,
+        };
+        let id = client.post(complex).ok().unwrap();
+        let retrieved_complex = client.get::<Complex>(&id).ok().unwrap();
+        client.delete::<Complex>(&id).ok().unwrap();
+        assert!(client.get::<Complex>(&id).is_err());
         client.nuke();
     }
 }
