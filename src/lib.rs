@@ -72,23 +72,14 @@ mod simple_db {
             let folder_path = self.get_folder::<T>();
             let directory_read = fs::read_dir(folder_path).ok().unwrap();
             let matches: Vec<T> = directory_read
-                // .map(|x| {
-                //     let read_results = &fs::read(&x.path());
-                //     match read_results {
-                //         Ok(read_bytes) => {
-                //             let result = bincode::deserialize(&read_bytes);
-                //             result
-                //         }
-                //         Err(_) => None,
-                //     }
-                // })
-                // .filter(|x| x.is_ok())
-                // .map(|x|x.unwrap())
-                // .filter(|x|x)
                 .filter_map(|x| dir_entry_matches_predicate::<T>(x.unwrap(), predicate))
                 .take(limit)
                 .collect();
-            Ok(Some(matches))
+            return if matches.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(matches))
+            };
         }
 
         pub fn find_one<T: serde::de::DeserializeOwned>(
@@ -269,5 +260,16 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(actual, "hello");
+    }
+
+    #[test]
+    fn not_found() {
+        let client = seeded_client();
+        let id = client.post::<String>("hello".to_string()).ok().unwrap();
+        let actual = client
+            .find_one::<String>(|x: &String| x.starts_with("hellllooo"))
+            .ok()
+            .unwrap();
+        assert!(actual.is_none());
     }
 }
