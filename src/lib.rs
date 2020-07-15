@@ -120,14 +120,14 @@ mod tests {
 
     #[test]
     fn create_client() {
-        let client = seeded_client();
+        let _client = seeded_client();
     }
 
     #[test]
     fn post() {
         let client = seeded_client();
         client.post("hello");
-        let actual = client.nuke();
+        client.nuke();
     }
 
     #[test]
@@ -136,7 +136,7 @@ mod tests {
         let id = client.post::<String>("hello".to_string()).ok().unwrap();
         let actual = client.get::<String>(&id).ok().unwrap();
         assert_eq!(actual, "hello");
-        let actual = client.nuke();
+        client.nuke();
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
         let id2 = client.post::<String>("hello2".to_string()).ok().unwrap();
         let actual2 = client.get::<String>(&id2).ok().unwrap();
         assert_eq!(actual2, "hello2");
-        let actual = client.nuke();
+        client.nuke();
     }
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
         let actual = client.nuke();
         assert!(actual.is_ok());
         assert!(client.get::<String>(&id).is_err());
-        let actual = client.nuke();
+        client.nuke();
     }
 
     #[test]
@@ -168,6 +168,7 @@ mod tests {
         assert!(client.get::<String>(&id).is_ok());
         client.delete::<String>(&id).ok().unwrap();
         assert!(client.get::<String>(&id).is_err());
+        client.nuke();
     }
 
     #[test]
@@ -175,5 +176,6 @@ mod tests {
         let client = seeded_client();
         let result = client.delete::<String>(&"made_up".to_string());
         assert!(result.is_err());
+        client.nuke();
     }
 }
