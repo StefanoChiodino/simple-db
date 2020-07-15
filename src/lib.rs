@@ -16,9 +16,8 @@ mod simple_db {
         pub fn post<T: serde::ser::Serialize>(&self, obj: T) -> Result<usize, Errors> {
             let folder_path = get_created_folder::<T>();
             let new_index = std::fs::read_dir(&folder_path).unwrap().count();
-
-            let mut file =
-                File::create(folder_path.join(Path::new(&new_index.to_string()))).unwrap();
+            let file_path = folder_path.join(Path::new(&new_index.to_string()));
+            let mut file = File::create(file_path).unwrap();
 
             bincode::serialize_into(&mut file, &obj).unwrap();
             Ok(new_index)
@@ -26,8 +25,11 @@ mod simple_db {
 
         pub fn get<T: serde::de::DeserializeOwned>(&self, index: usize) -> Result<T, Errors> {
             let folder_path = get_created_folder::<T>();
-            let file_path = folder_path.join(&index.to_string());
-            let read_bytes = &fs::read(file_path).unwrap();
+            let file_path = folder_path.join(Path::new(&index.to_string()));
+            let read_bytes = &fs::read(&file_path).expect(&format!(
+                "Error reading file at '{:?}'.",
+                file_path.display()
+            ));
             let result = bincode::deserialize(&read_bytes);
             let obj = result.unwrap();
             Ok(obj)
@@ -90,8 +92,8 @@ mod tests {
     #[test]
     fn get() {
         let client = Client {};
-        let index = client.post("hello").ok().unwrap();
-        let actual = client.get::<String>(index);
-        // assert_eq!(actual, "hello")
+        let index = client.post::<String>("hello".to_string()).ok().unwrap();
+        let actual = client.get::<String>(index).ok().unwrap();
+        assert_eq!(actual, "hello")
     }
 }
