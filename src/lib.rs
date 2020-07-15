@@ -10,7 +10,6 @@ mod simple_db {
     }
 
     pub enum Errors {
-        InitialisationError,
         NotFound,
     }
 
@@ -64,6 +63,7 @@ mod simple_db {
             }
         }
 
+        #[allow(dead_code)]
         pub fn find<T: serde::de::DeserializeOwned>(
             &self,
             predicate: fn(&T) -> bool,
@@ -82,6 +82,7 @@ mod simple_db {
             };
         }
 
+        #[allow(dead_code)]
         pub fn find_one<T: serde::de::DeserializeOwned>(
             &self,
             predicate: fn(&T) -> bool,
@@ -99,7 +100,7 @@ mod simple_db {
             let seed_folder = Path::new(self.name.as_str());
             let base_of_data_path = seed_folder.join("base_of_data");
             if base_of_data_path.exists() == false {
-                fs::create_dir_all(&base_of_data_path);
+                fs::create_dir_all(&base_of_data_path).unwrap();
             }
             base_of_data_path
         }
@@ -178,8 +179,8 @@ mod tests {
     #[test]
     fn post() {
         let client = seeded_client();
-        client.post("hello");
-        client.nuke();
+        client.post("hello").ok().unwrap();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
@@ -188,7 +189,7 @@ mod tests {
         let id = client.post::<String>("hello".to_string()).ok().unwrap();
         let actual = client.get::<String>(&id).ok().unwrap();
         assert_eq!(actual, "hello");
-        client.nuke();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
@@ -200,7 +201,7 @@ mod tests {
         let id2 = client.post::<String>("hello2".to_string()).ok().unwrap();
         let actual2 = client.get::<String>(&id2).ok().unwrap();
         assert_eq!(actual2, "hello2");
-        client.nuke();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
@@ -210,7 +211,7 @@ mod tests {
         let actual = client.nuke();
         assert!(actual.is_ok());
         assert!(client.get::<String>(&id).is_err());
-        client.nuke();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
@@ -220,7 +221,7 @@ mod tests {
         assert!(client.get::<String>(&id).is_ok());
         client.delete::<String>(&id).ok().unwrap();
         assert!(client.get::<String>(&id).is_err());
-        client.nuke();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
@@ -228,12 +229,12 @@ mod tests {
         let client = seeded_client();
         let result = client.delete::<String>(&"made_up".to_string());
         assert!(result.is_err());
-        client.nuke();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
     fn complex_object_workflow() {
-        #[derive(Serialize, Deserialize)]
+        #[derive(Serialize, Deserialize, PartialEq, Debug)]
         struct Complex {
             name: String,
             x: i32,
@@ -243,33 +244,36 @@ mod tests {
             x: 34,
         };
         let client = seeded_client();
-        let id = client.post(complex).ok().unwrap();
+        let id = client.post(&complex).ok().unwrap();
         let retrieved_complex = client.get::<Complex>(&id).ok().unwrap();
+        assert_eq!(retrieved_complex, complex);
         client.delete::<Complex>(&id).ok().unwrap();
         assert!(client.get::<Complex>(&id).is_err());
-        client.nuke();
+        client.nuke().ok().unwrap();
     }
 
     #[test]
     fn find() {
         let client = seeded_client();
-        let id = client.post::<String>("hello".to_string()).ok().unwrap();
+        client.post::<String>("hello".to_string()).ok().unwrap();
         let actual = client
             .find_one::<String>(|x: &String| x.starts_with("hell"))
             .ok()
             .unwrap()
             .unwrap();
         assert_eq!(actual, "hello");
+        client.nuke().ok().unwrap();
     }
 
     #[test]
     fn not_found() {
         let client = seeded_client();
-        let id = client.post::<String>("hello".to_string()).ok().unwrap();
+        client.post::<String>("hello".to_string()).ok().unwrap();
         let actual = client
             .find_one::<String>(|x: &String| x.starts_with("hellllooo"))
             .ok()
             .unwrap();
         assert!(actual.is_none());
+        client.nuke().ok().unwrap();
     }
 }
