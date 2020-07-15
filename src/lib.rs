@@ -3,6 +3,7 @@ mod simple_db {
     use std::fs;
     use std::fs::File;
     use std::path::{Path, PathBuf};
+    use uuid::Uuid;
 
     pub struct Client {
         name: String,
@@ -21,20 +22,20 @@ mod simple_db {
         }
 
         #[allow(dead_code)]
-        pub fn post<T: serde::ser::Serialize>(&self, obj: T) -> Result<usize, Errors> {
+        pub fn post<T: serde::ser::Serialize>(&self, obj: T) -> Result<String, Errors> {
             let folder_path = self.get_folder::<T>();
-            let new_index = std::fs::read_dir(&folder_path).unwrap().count();
-            let file_path = folder_path.join(Path::new(&new_index.to_string()));
+            let id = Uuid::new_v4().to_string();
+            let file_path = folder_path.join(Path::new(&id.to_string()));
             let mut file = File::create(file_path).unwrap();
 
             bincode::serialize_into(&mut file, &obj).unwrap();
-            Ok(new_index)
+            Ok(id)
         }
 
         #[allow(dead_code)]
-        pub fn get<T: serde::de::DeserializeOwned>(&self, index: usize) -> Result<T, Errors> {
+        pub fn get<T: serde::de::DeserializeOwned>(&self, id: &String) -> Result<T, Errors> {
             let folder_path = self.get_folder::<T>();
-            let file_path = folder_path.join(Path::new(&index.to_string()));
+            let file_path = folder_path.join(Path::new(id));
             let read_results = &fs::read(&file_path);
             match read_results {
                 Ok(read_bytes) => {
@@ -122,8 +123,8 @@ mod tests {
     #[test]
     fn get() {
         let client = seeded_client();
-        let index = client.post::<String>("hello".to_string()).ok().unwrap();
-        let actual = client.get::<String>(index).ok().unwrap();
+        let id = client.post::<String>("hello".to_string()).ok().unwrap();
+        let actual = client.get::<String>(&id).ok().unwrap();
         assert_eq!(actual, "hello");
         let actual = client.nuke();
     }
@@ -131,11 +132,11 @@ mod tests {
     #[test]
     fn multiple_get() {
         let client = seeded_client();
-        let index1 = client.post::<String>("hello1".to_string()).ok().unwrap();
-        let actual1 = client.get::<String>(index1).ok().unwrap();
+        let id1 = client.post::<String>("hello1".to_string()).ok().unwrap();
+        let actual1 = client.get::<String>(&id1).ok().unwrap();
         assert_eq!(actual1, "hello1");
-        let index2 = client.post::<String>("hello2".to_string()).ok().unwrap();
-        let actual2 = client.get::<String>(index2).ok().unwrap();
+        let id2 = client.post::<String>("hello2".to_string()).ok().unwrap();
+        let actual2 = client.get::<String>(&id2).ok().unwrap();
         assert_eq!(actual2, "hello2");
         let actual = client.nuke();
     }
@@ -143,10 +144,10 @@ mod tests {
     #[test]
     fn nuke() {
         let client = seeded_client();
-        let index = client.post::<String>("hello1".to_string()).ok().unwrap();
+        let id = client.post::<String>("hello1".to_string()).ok().unwrap();
         let actual = client.nuke();
         assert!(actual.is_ok());
-        assert!(client.get::<String>(index).is_err());
+        assert!(client.get::<String>(&id).is_err());
         let actual = client.nuke();
     }
 }
