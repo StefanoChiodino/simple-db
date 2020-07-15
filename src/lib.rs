@@ -54,6 +54,16 @@ mod simple_db {
             Ok(())
         }
 
+        #[allow(dead_code)]
+        pub fn delete<T: serde::de::DeserializeOwned>(&self, id: &String) -> Result<(), Errors> {
+            let folder_path = self.get_folder::<T>();
+            let file_path = folder_path.join(Path::new(id));
+            match fs::remove_file(file_path) {
+                Ok(_) => Ok(()),
+                Err(_) => Err(Errors::NotFound),
+            }
+        }
+
         pub fn get_seeded_folder(&self) -> PathBuf {
             let seed_folder = Path::new(self.name.as_str());
             let base_of_data_path = seed_folder.join("base_of_data");
@@ -144,10 +154,26 @@ mod tests {
     #[test]
     fn nuke() {
         let client = seeded_client();
-        let id = client.post::<String>("hello1".to_string()).ok().unwrap();
+        let id = client.post::<String>("hello".to_string()).ok().unwrap();
         let actual = client.nuke();
         assert!(actual.is_ok());
         assert!(client.get::<String>(&id).is_err());
         let actual = client.nuke();
+    }
+
+    #[test]
+    fn delete() {
+        let client = seeded_client();
+        let id = client.post::<String>("hello".to_string()).ok().unwrap();
+        assert!(client.get::<String>(&id).is_ok());
+        client.delete::<String>(&id).ok().unwrap();
+        assert!(client.get::<String>(&id).is_err());
+    }
+
+    #[test]
+    fn delete_non_existing_id() {
+        let client = seeded_client();
+        let result = client.delete::<String>(&"made_up".to_string());
+        assert!(result.is_err());
     }
 }
