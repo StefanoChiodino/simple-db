@@ -1,7 +1,7 @@
 mod simple_db {
     use regex::Regex;
     use std::fs;
-    use std::fs::File;
+    use std::fs::{DirEntry, File};
     use std::path::{Path, PathBuf};
     use uuid::Uuid;
 
@@ -64,6 +64,46 @@ mod simple_db {
             }
         }
 
+        pub fn find<T: serde::de::DeserializeOwned>(
+            &self,
+            predicate: fn(&T) -> bool,
+            limit: usize,
+        ) -> Result<Option<Vec<T>>, Errors> {
+            let folder_path = self.get_folder::<T>();
+            let directory_read = fs::read_dir(folder_path).ok().unwrap();
+            let matches: Vec<T> = directory_read
+                // .map(|x| {
+                //     let read_results = &fs::read(&x.path());
+                //     match read_results {
+                //         Ok(read_bytes) => {
+                //             let result = bincode::deserialize(&read_bytes);
+                //             result
+                //         }
+                //         Err(_) => None,
+                //     }
+                // })
+                // .filter(|x| x.is_ok())
+                // .map(|x|x.unwrap())
+                // .filter(|x|x)
+                .filter_map(|x| dir_entry_matches_predicate::<T>(x.unwrap(), predicate))
+                .take(limit)
+                .collect();
+            Ok(Some(matches))
+        }
+
+        pub fn find_one<T: serde::de::DeserializeOwned>(
+            &self,
+            predicate: fn(&T) -> bool,
+        ) -> Result<Option<T>, Errors> {
+            match self.find(predicate, 1) {
+                Ok(items_option) => match items_option {
+                    Some(items) => Ok(Some(items.into_iter().nth(0).unwrap())),
+                    None => Ok(None),
+                },
+                Err(_) => Err(Errors::NotFound),
+            }
+        }
+
         pub fn get_seeded_folder(&self) -> PathBuf {
             let seed_folder = Path::new(self.name.as_str());
             let base_of_data_path = seed_folder.join("base_of_data");
@@ -82,6 +122,25 @@ mod simple_db {
             }
             println!("Got folder with path '{}'", folder_path.display());
             folder_path
+        }
+    }
+
+    fn dir_entry_matches_predicate<T: serde::de::DeserializeOwned>(
+        dir_entry: DirEntry,
+        predicate: fn(&T) -> bool,
+    ) -> Option<T> {
+        let read_results = &fs::read(&dir_entry.path());
+        match read_results {
+            Ok(read_bytes) => {
+                let result = bincode::deserialize(&read_bytes);
+                let obj = result.unwrap();
+                if predicate(&obj) {
+                    Some(obj)
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
         }
     }
 
@@ -188,15 +247,27 @@ mod tests {
             name: String,
             x: i32,
         }
-        let client = seeded_client();
         let complex = Complex {
             name: "Stefano".to_string(),
             x: 34,
         };
+        let client = seeded_client();
         let id = client.post(complex).ok().unwrap();
         let retrieved_complex = client.get::<Complex>(&id).ok().unwrap();
         client.delete::<Complex>(&id).ok().unwrap();
         assert!(client.get::<Complex>(&id).is_err());
         client.nuke();
+    }
+
+    #[test]
+    fn find() {
+        let client = seeded_client();
+        let id = client.post::<String>("hello".to_string()).ok().unwrap();
+        let actual = client
+            .find_one::<String>(|x: &String| x.starts_with("hell"))
+            .ok()
+            .unwrap()
+            .unwrap();
+        assert_eq!(actual, "hello");
     }
 }
