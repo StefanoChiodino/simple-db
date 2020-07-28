@@ -92,8 +92,12 @@ mod simple_db {
         }
 
         #[allow(dead_code)]
-        pub fn delete<T: serde::de::DeserializeOwned>(&self, id: &String) -> Result<(), Errors> {
-            Err(Errors::NotFound)
+        pub fn delete<T: serde::de::DeserializeOwned>(
+            &mut self,
+            id: &String,
+        ) -> Result<(), Errors> {
+            self.data_map.remove(id);
+            Ok(())
         }
 
         #[allow(dead_code)]
@@ -204,7 +208,7 @@ mod simple_db {
 
         #[test]
         fn delete_non_existing_id() {
-            let db = seeded_db();
+            let mut db = seeded_db();
             let result = db.delete::<String>(&"made_up".to_string());
             assert!(result.is_err());
             nuke_db(db);
