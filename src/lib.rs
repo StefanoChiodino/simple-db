@@ -96,8 +96,10 @@ mod simple_db {
             &mut self,
             id: &String,
         ) -> Result<(), Errors> {
-            self.data_map.remove(id);
-            Ok(())
+            match self.data_map.remove(id) {
+                Some(_) => Ok(()),
+                None => Err(Errors::NotFound),
+            }
         }
 
         #[allow(dead_code)]
