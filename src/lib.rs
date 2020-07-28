@@ -3,7 +3,7 @@ mod simple_db {
     use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Seek, SeekFrom};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use uuid::Uuid;
 
     pub enum Errors {
@@ -19,6 +19,10 @@ mod simple_db {
 
     impl Db {
         pub fn new(name: String) -> Self {
+            let root_folder_path: PathBuf = Path::new("data").to_owned();
+            let db_filename = &format!("{}.sdb", name.as_str());
+            let db_path = Path::new(&format!("{}.sdb", name.as_str()));
+            fs::create_dir(&root_folder_path);
             Self {
                 name: name.to_string(),
                 data_map: BTreeMap::new(),
@@ -26,7 +30,7 @@ mod simple_db {
                     .read(true)
                     .write(true)
                     .create(true)
-                    .open(Path::new(&format!("{}.sdb", name.as_str())))
+                    .open(&root_folder_path.join(db_filename))
                     .unwrap(),
             }
         }
