@@ -33,10 +33,13 @@ mod simple_db {
     }
 
     impl Db {
+        #[allow(dead_code)]
         pub fn new(name: String) -> Self {
             let root_folder_path: PathBuf = Path::new("data").to_owned();
             let db_filename = &format!("{}.sdb", name.as_str());
-            fs::create_dir(&root_folder_path);
+            match fs::create_dir(&root_folder_path) {
+                _ => (),
+            };
             let file = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -58,7 +61,7 @@ mod simple_db {
         ) -> Result<String, Errors> {
             let new_id = Uuid::new_v4().to_string();
             let data_location = self.file.metadata().unwrap().len();
-            self.file.seek(SeekFrom::Start(data_location));
+            self.file.seek(SeekFrom::Start(data_location)).unwrap();
             let serialised_value = bincode::serialize(&obj).unwrap();
             println!(
                 "POST: writing to location {:?} value {:?}",
@@ -93,12 +96,14 @@ mod simple_db {
                     let offset_size = size;
 
                     println!(
-                        "GET: id {} position {} size {} offset position {} offset size {}",
-                        id, position, size, offset_position, offset_size,
+                        "GET: id {} type {:?} position {} size {} offset position {} offset size {}",
+                        id, TypeId::of::<T>(), position, size, offset_position, offset_size,
                     );
                     let mut raw_data: Vec<u8> = Vec::with_capacity(*offset_size as usize);
                     raw_data.resize(*offset_size as usize, 0);
-                    self.file.seek(SeekFrom::Start(offset_position as u64));
+                    self.file
+                        .seek(SeekFrom::Start(offset_position as u64))
+                        .unwrap();
                     self.file.read_exact(raw_data.as_mut()).unwrap();
                     Ok(bincode::deserialize(raw_data.as_slice()).unwrap())
                 }
@@ -184,7 +189,9 @@ mod simple_db {
         }
 
         fn nuke_db(db: Db) {
-            fs::remove_file(format!("{}.sdb", db.name));
+            match fs::remove_file(format!("{}.sdb", db.name)) {
+                _ => (),
+            };
         }
 
         // use crate::simple_db::Crud;
