@@ -1,5 +1,5 @@
 mod simple_db {
-    use std::any::TypeId;
+    use std::any::{Any, TypeId};
     use std::collections::HashMap;
     use std::fs;
     use std::fs::{File, OpenOptions};
@@ -11,12 +11,25 @@ mod simple_db {
         NotFound,
     }
 
-    pub struct Db {
-        name: String,
+    struct Table {
         // GUID -> (position, length)
         data_map: HashMap<String, (u32, u32)>,
+        indexes: Vec<&'static dyn Fn(dyn Any) -> dyn Any>,
+    }
+
+    impl Table {
+        fn new() -> Self {
+            Self {
+                data_map: HashMap::new(),
+                indexes: Vec::new(),
+            }
+        }
+    }
+
+    pub struct Db {
+        name: String,
         file: File,
-        // indexes: HashMap<TypeId, Vec<dyn Fn<T, Output = T>>>,
+        tables: HashMap<TypeId, Table>,
     }
 
     impl Db {
@@ -32,14 +45,17 @@ mod simple_db {
                 .unwrap();
             Self {
                 name: name.to_string(),
-                data_map: HashMap::new(),
                 file,
+                tables: HashMap::new(),
                 // indexes: Default::default(),
             }
         }
 
         #[allow(dead_code)]
-        pub fn post<T: serde::ser::Serialize>(&mut self, obj: T) -> Result<String, Errors> {
+        pub fn post<T: 'static + serde::ser::Serialize + Sized>(
+            &mut self,
+            obj: T,
+        ) -> Result<String, Errors> {
             let new_id = Uuid::new_v4().to_string();
             let data_location = self.file.metadata().unwrap().len();
             println!("data location {:?}", data_location);
@@ -47,7 +63,11 @@ mod simple_db {
             let serialised_value = bincode::serialize(&obj).unwrap();
             println!("Serialised value {:?}", serialised_value);
             bincode::serialize_into(&mut self.file, &serialised_value).unwrap();
-            self.data_map.insert(
+            if self.tables.contains_key(&obj.type_id()) == false {
+                self.tables.insert(obj.type_id(), Table::new());
+            }
+            let table = self.tables.get_mut(&obj.type_id()).unwrap();
+            table.data_map.insert(
                 new_id.to_string(),
                 (data_location as u32, serialised_value.len() as u32),
             );
@@ -61,8 +81,17 @@ mod simple_db {
         }
 
         #[allow(dead_code)]
-        pub fn get<T: serde::de::DeserializeOwned>(&mut self, id: &String) -> Result<T, Errors> {
-            match self.data_map.get(id) {
+        pub fn get<T: 'static + serde::de::DeserializeOwned>(
+            &mut self,
+            id: &String,
+        ) -> Result<T, Errors> {
+            match self
+                .tables
+                .get(&TypeId::of::<T>())
+                .unwrap()
+                .data_map
+                .get(id)
+            {
                 Some((position, size)) => {
                     let offset_position = position + 8;
                     let offset_size = size;
@@ -95,12 +124,15 @@ mod simple_db {
         }
 
         #[allow(dead_code)]
-        pub fn delete<T: serde::de::DeserializeOwned>(
+        pub fn delete<T: 'static + serde::de::DeserializeOwned>(
             &mut self,
             id: &String,
         ) -> Result<(), Errors> {
-            match self.data_map.remove(id) {
-                Some(_) => Ok(()),
+            match self.tables.get_mut(&TypeId::of::<T>()) {
+                Some(table) => match table.data_map.remove(id) {
+                    Some(_) => Ok(()),
+                    None => Err(Errors::NotFound),
+                },
                 None => Err(Errors::NotFound),
             }
         }
@@ -155,7 +187,6 @@ mod simple_db {
         use crate::simple_db::*;
         use serde::Deserialize;
         use serde::Serialize;
-        use std::collections::HashMap;
         use std::fs;
         use std::panic;
         use uuid::Uuid;
@@ -169,20 +200,20 @@ mod simple_db {
         }
 
         // use crate::simple_db::Crud;
-        #[test]
-        fn safe_filename() {
-            let mut pairs: HashMap<&str, &str> = HashMap::new();
-            pairs.insert("test", "test");
-            pairs.insert("a1", "a1");
-            // pairs.insert("!@£^@!$£", "_");
-            pairs.insert("test!@£$123", "test123");
-            pairs.insert(std::any::type_name::<str>(), "str");
-
-            for (input, expected_output) in pairs {
-                // let actual_output = to_safe_filename(input);
-                // assert_eq!(actual_output, expected_output);
-            }
-        }
+        // #[test]
+        // fn safe_filename() {
+        //     let mut pairs: HashMap<&str, &str> = HashMap::new();
+        //     pairs.insert("test", "test");
+        //     pairs.insert("a1", "a1");
+        //     // pairs.insert("!@£^@!$£", "_");
+        //     pairs.insert("test!@£$123", "test123");
+        //     pairs.insert(std::any::type_name::<str>(), "str");
+        //
+        //     for (input, expected_output) in pairs {
+        //         let actual_output = to_safe_filename(input);
+        //         assert_eq!(actual_output, expected_output);
+        //     }
+        // }
 
         #[test]
         fn create_db() {
@@ -248,9 +279,10 @@ mod simple_db {
                 x: 34,
             };
             let mut db = seeded_db();
-            let id = db.post(&complex).ok().unwrap();
+            let id = db.post(complex).ok().unwrap();
             let retrieved_complex = db.get::<Complex>(&id).ok().unwrap();
-            assert_eq!(retrieved_complex, complex);
+            assert_eq!(retrieved_complex.name, "Stefano");
+            assert_eq!(retrieved_complex.x, 34);
             db.delete::<Complex>(&id).ok().unwrap();
             assert!(db.get::<Complex>(&id).is_err());
             nuke_db(db);
