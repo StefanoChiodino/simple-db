@@ -1,5 +1,6 @@
 mod simple_db {
-    use std::collections::BTreeMap;
+    use std::any::TypeId;
+    use std::collections::HashMap;
     use std::fs;
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Seek, SeekFrom};
@@ -10,28 +11,30 @@ mod simple_db {
         NotFound,
     }
 
-    pub(crate) struct Db {
+    pub struct Db {
         name: String,
-        data_map: BTreeMap<String, (u32, u32)>,
+        // GUID -> (position, length)
+        data_map: HashMap<String, (u32, u32)>,
         file: File,
-        // indexes: HashMap<T, dyn Fn(&str) -> T>,
+        // indexes: HashMap<TypeId, Vec<dyn Fn<T, Output = T>>>,
     }
 
     impl Db {
         pub fn new(name: String) -> Self {
             let root_folder_path: PathBuf = Path::new("data").to_owned();
             let db_filename = &format!("{}.sdb", name.as_str());
-            let db_path = Path::new(&format!("{}.sdb", name.as_str()));
             fs::create_dir(&root_folder_path);
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&root_folder_path.join(db_filename))
+                .unwrap();
             Self {
                 name: name.to_string(),
-                data_map: BTreeMap::new(),
-                file: OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .open(&root_folder_path.join(db_filename))
-                    .unwrap(),
+                data_map: HashMap::new(),
+                file,
+                // indexes: Default::default(),
             }
         }
 
@@ -65,7 +68,7 @@ mod simple_db {
                     let offset_size = size;
                     self.file.seek(SeekFrom::Start(0));
                     println!(
-                        "Before reading - file bytes contents {:?}",
+                        "Before reading - file bytes content s {:?}",
                         fs::read(&format!("{}.sdb", self.name.as_str()))
                     );
 
@@ -102,22 +105,49 @@ mod simple_db {
             }
         }
 
-        #[allow(dead_code)]
-        pub fn find<T: serde::de::DeserializeOwned>(
-            &self,
-            predicate: fn(&T) -> bool,
-            limit: usize,
-        ) -> Result<Option<Vec<T>>, Errors> {
-            Err(Errors::NotFound)
-        }
+        // #[allow(dead_code)]
+        // pub fn find<T: serde::de::DeserializeOwned>(
+        //     &mut self,
+        //     predicate: fn(&T) -> bool,
+        //     limit: usize,
+        // ) -> Result<Option<Vec<T>>, Errors> {
+        //     let matches: Vec<T> = self
+        //         .data_map
+        //         .keys()
+        //         .map(|k| self.get::<T>(k))
+        //         .filter_map(|r| match r {
+        //             Ok(item) => {
+        //                 if predicate(&item) {
+        //                     Some(item)
+        //                 } else {
+        //                     None
+        //                 }
+        //             }
+        //             _ => None,
+        //         })
+        //         .take(limit)
+        //         .collect();
+        //     return if matches.is_empty() {
+        //         Ok(None)
+        //     } else {
+        //         Ok(Some(matches))
+        //     };
+        //     // Err(Errors::NotFound)
+        // }
 
-        #[allow(dead_code)]
-        pub fn find_one<T: serde::de::DeserializeOwned>(
-            &self,
-            predicate: fn(&T) -> bool,
-        ) -> Result<Option<T>, Errors> {
-            Err(Errors::NotFound)
-        }
+        // #[allow(dead_code)]
+        // pub fn find_one<T: serde::de::DeserializeOwned>(
+        //     &mut self,
+        //     predicate: fn(&T) -> bool,
+        // ) -> Result<Option<T>, Errors> {
+        //     match self.find(predicate, 1) {
+        //         Ok(items_option) => match items_option {
+        //             Some(items) => Ok(Some(items.into_iter().nth(0).unwrap())),
+        //             None => Ok(None),
+        //         },
+        //         Err(_) => Err(Errors::NotFound),
+        //     }
+        // }
     }
 
     #[cfg(test)]
@@ -189,16 +219,6 @@ mod simple_db {
         }
 
         #[test]
-        fn nuke() {
-            let mut db = seeded_db();
-            let id = db.post::<String>("hello".to_string()).ok().unwrap();
-            let actual = db.nuke();
-            assert!(actual.is_ok());
-            assert!(db.get::<String>(&id).is_err());
-            nuke_db(db);
-        }
-
-        #[test]
         fn delete() {
             let mut db = seeded_db();
             let id = db.post::<String>("hello".to_string()).ok().unwrap();
@@ -236,29 +256,29 @@ mod simple_db {
             nuke_db(db);
         }
 
-        #[test]
-        fn find() {
-            let mut db = seeded_db();
-            db.post::<String>("hello".to_string()).ok().unwrap();
-            let actual = db
-                .find_one::<String>(|x: &String| x.starts_with("hell"))
-                .ok()
-                .unwrap()
-                .unwrap();
-            assert_eq!(actual, "hello");
-            nuke_db(db);
-        }
-
-        #[test]
-        fn not_found() {
-            let mut db = seeded_db();
-            db.post::<String>("hello".to_string()).ok().unwrap();
-            let actual = db
-                .find_one::<String>(|x: &String| x.starts_with("hellllooo"))
-                .ok()
-                .unwrap();
-            assert!(actual.is_none());
-            nuke_db(db);
-        }
+        // #[test]
+        // fn find() {
+        //     let mut db = seeded_db();
+        //     db.post::<String>("hello".to_string()).ok().unwrap();
+        //     let actual = db
+        //         .find_one::<String>(|x: &String| x.starts_with("hell"))
+        //         .ok()
+        //         .unwrap()
+        //         .unwrap();
+        //     assert_eq!(actual, "hello");
+        //     nuke_db(db);
+        // }
+        //
+        // #[test]
+        // fn not_found() {
+        //     let mut db = seeded_db();
+        //     db.post::<String>("hello".to_string()).ok().unwrap();
+        //     let actual = db
+        //         .find_one::<String>(|x: &String| x.starts_with("hellllooo"))
+        //         .ok()
+        //         .unwrap();
+        //     assert!(actual.is_none());
+        //     nuke_db(db);
+        // }
     }
 }
