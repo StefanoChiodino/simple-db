@@ -58,10 +58,12 @@ mod simple_db {
         ) -> Result<String, Errors> {
             let new_id = Uuid::new_v4().to_string();
             let data_location = self.file.metadata().unwrap().len();
-            println!("data location {:?}", data_location);
             self.file.seek(SeekFrom::Start(data_location));
             let serialised_value = bincode::serialize(&obj).unwrap();
-            println!("Serialised value {:?}", serialised_value);
+            println!(
+                "POST: writing to location {:?} value {:?}",
+                data_location, serialised_value
+            );
             bincode::serialize_into(&mut self.file, &serialised_value).unwrap();
             if self.tables.contains_key(&obj.type_id()) == false {
                 self.tables.insert(obj.type_id(), Table::new());
@@ -70,12 +72,6 @@ mod simple_db {
             table.data_map.insert(
                 new_id.to_string(),
                 (data_location as u32, serialised_value.len() as u32),
-            );
-            // self.file.flush();
-            self.file.seek(SeekFrom::Start(0));
-            println!(
-                "After Writing - file bytes contents {:?}",
-                fs::read(&format!("{}.sdb", self.name.as_str()))
             );
             Ok(new_id)
         }
@@ -95,23 +91,15 @@ mod simple_db {
                 Some((position, size)) => {
                     let offset_position = position + 8;
                     let offset_size = size;
-                    self.file.seek(SeekFrom::Start(0));
-                    println!(
-                        "Before reading - file bytes content s {:?}",
-                        fs::read(&format!("{}.sdb", self.name.as_str()))
-                    );
 
                     println!(
-                        "GET: position {} size {} offset position {} offset size {}",
-                        position, size, offset_position, offset_size,
+                        "GET: id {} position {} size {} offset position {} offset size {}",
+                        id, position, size, offset_position, offset_size,
                     );
                     let mut raw_data: Vec<u8> = Vec::with_capacity(*offset_size as usize);
-                    println!("raw data size {}", raw_data.len());
                     raw_data.resize(*offset_size as usize, 0);
-                    println!("raw data size {}", raw_data.len());
                     self.file.seek(SeekFrom::Start(offset_position as u64));
                     self.file.read_exact(raw_data.as_mut()).unwrap();
-                    println!("raw data size {}", raw_data.len());
                     Ok(bincode::deserialize(raw_data.as_slice()).unwrap())
                 }
                 _ => Err(Errors::NotFound),
